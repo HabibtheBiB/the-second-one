@@ -186,9 +186,12 @@
             const tag = categoryMap[categoryKey];
             const searchRadius = 2000; 
 
-            // THE FIX: Flattened into a single line. No invisible line breaks or tabs!
-            const query = `[out:json][timeout:5];node${tag}(around:${searchRadius},${lat},${lon});out 1;`;
+            // ChatGPT's updated query format
+            const query = `[out:json][timeout:10];node${tag}(around:${searchRadius},${lat},${lon});out body;`;
             
+            // Print exactly what we are asking the server to the console
+            console.log("SENDING QUERY TO SERVER:", query);
+
             const servers = [
                 "https://overpass-api.de/api/interpreter",
                 "https://overpass.kumi.systems/api/interpreter",
@@ -199,14 +202,17 @@
 
             for (let urlBase of servers) {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000); 
+                const timeoutId = setTimeout(() => controller.abort(), 10000); 
 
                 try {
                     statusEl.innerText = `Searching map database...`;
                     
-                    // Clean GET request
-                    const url = `${urlBase}?data=${encodeURIComponent(query)}`;
-                    const response = await fetch(url, { signal: controller.signal });
+                    // The Raw POST request we both agreed on
+                    const response = await fetch(urlBase, {
+                        method: "POST",
+                        body: query,
+                        signal: controller.signal
+                    });
                     
                     clearTimeout(timeoutId); 
                     
@@ -216,6 +222,9 @@
                     }
                     
                     const data = await response.json();
+                    
+                    // Print the actual response data to the console
+                    console.log("RECEIVED DATA:", data);
 
                     if (data.elements && data.elements.length > 0) {
                         targetLat = data.elements[0].lat;
