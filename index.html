@@ -184,29 +184,40 @@
         async function fetchFromOverpass(categoryKey, lat, lon) {
             statusEl.innerText = "3/3: Searching nearby shops...";
             const tag = categoryMap[categoryKey];
-            const searchRadius = 3000; 
+            const searchRadius = 1000; 
 
             const query = `
-                [out:json];
+                [out:json][timeout:5];
                 node${tag}(around:${searchRadius},${lat},${lon});
-                out center 1;
+                out 1;
             `;
             
-            // Fast Asian servers + Global fallback
+            // Reverting to the most stable global servers since the Asian DNS failed
             const servers = [
-                "https://overpass.osm.jp/api/interpreter",
-                "https://overpass.nchc.org.tw/api/interpreter",
-                "https://overpass-api.de/api/interpreter"
+                "https://overpass-api.de/api/interpreter",
+                "https://overpass.kumi.systems/api/interpreter"
             ];
+
+            let lastError = "Unknown error";
 
             for (let urlBase of servers) {
                 try {
                     statusEl.innerText = `Searching map database...`;
-                    const url = `${urlBase}?data=${encodeURIComponent(query)}`;
                     
-                    const response = await fetch(url);
+                    // THE FIX: Sending as a POST request to bypass the 406 Not Acceptable error
+                    const response = await fetch(urlBase, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        body: "data=" + encodeURIComponent(query)
+                    });
                     
-                    if (!response.ok) continue; 
+                    if (!response.ok) {
+                        lastError = `Server rejected: ${response.status}`;
+                        continue; 
+                    }
                     
                     const data = await response.json();
 
@@ -216,9 +227,9 @@
                         const name = data.elements[0].tags.name || "Unnamed shop";
                         statusEl.innerText = `Found: ${name}`;
                         updateUI();
-                        return; // Success!
+                        return; 
                     } else {
-                        statusEl.innerText = "No shops found within 3km.";
+                        statusEl.innerText = "No shops found within 1km.";
                         targetLat = null;
                         targetLon = null;
                         distanceEl.innerText = "N/A";
@@ -226,11 +237,12 @@
                         return; 
                     }
                 } catch (error) {
-                    console.warn(`Server ${urlBase} failed. Trying next...`);
+                    lastError = error.message; 
+                    console.warn(`Server ${urlBase} failed: ${error.message}`);
                 }
             }
             
-            statusEl.innerText = "Map Error: All servers are busy or blocked.";
+            statusEl.innerText = `Map Error: ${lastError}`;
         }
 
         function updateUI() {
