@@ -192,27 +192,31 @@
                 out 1;
             `;
             
-            // Reverting to the most stable global servers since the Asian DNS failed
+            // Using different load-balanced instances of the main server
             const servers = [
-                "https://overpass-api.de/api/interpreter",
-                "https://overpass.kumi.systems/api/interpreter"
+                "https://lz4.overpass-api.de/api/interpreter", 
+                "https://z.overpass-api.de/api/interpreter",
+                "https://overpass-api.de/api/interpreter"
             ];
 
             let lastError = "Unknown error";
 
             for (let urlBase of servers) {
+                // CREATE THE KILL SWITCH: 5 second timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); 
+
                 try {
-                    statusEl.innerText = `Searching map database...`;
+                    statusEl.innerText = `Trying server: ${urlBase.split('/')[2]}...`;
                     
-                    // THE FIX: Sending as a POST request to bypass the 406 Not Acceptable error
+                    // Barebones POST request (No headers to trigger Apache 406 block)
                     const response = await fetch(urlBase, {
                         method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/x-www-form-urlencoded'
-                        },
-                        body: "data=" + encodeURIComponent(query)
+                        body: "data=" + encodeURIComponent(query),
+                        signal: controller.signal // Attach the kill switch
                     });
+                    
+                    clearTimeout(timeoutId); // Cancel the kill switch if successful
                     
                     if (!response.ok) {
                         lastError = `Server rejected: ${response.status}`;
@@ -237,8 +241,15 @@
                         return; 
                     }
                 } catch (error) {
-                    lastError = error.message; 
-                    console.warn(`Server ${urlBase} failed: ${error.message}`);
+                    clearTimeout(timeoutId); // Cancel the kill switch on error
+                    
+                    if (error.name === 'AbortError') {
+                        lastError = "Server timed out.";
+                        console.warn(`${urlBase} took over 5 seconds and was killed.`);
+                    } else {
+                        lastError = error.message; 
+                        console.warn(`${urlBase} failed: ${error.message}`);
+                    }
                 }
             }
             
