@@ -181,77 +181,48 @@
             }
         }
 
-        async function fetchFromOverpass(categoryKey, lat, lon) {
-            statusEl.innerText = "3/3: Searching nearby shops...";
-            const tag = categoryMap[categoryKey];
+async function fetchFromOverpass(categoryKey, lat, lon) {
+            statusEl.innerText = "3/3: Bypassing security to search map...";
+            
+            // Reverting to the actual categories you want
+            const tag = categoryMap[categoryKey]; 
             const searchRadius = 2000; 
 
-            // ChatGPT's updated query format
-            const query = `[out:json][timeout:10];node${tag}(around:${searchRadius},${lat},${lon});out body;`;
+            const query = `[out:json][timeout:10];node${tag}(around:${searchRadius},${lat},${lon});out center;`;
             
-            // Print exactly what we are asking the server to the console
-            console.log("SENDING QUERY TO SERVER:", query);
+            // The raw Overpass URL
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+            
+            // THE CHEAT CODE: Wrap the URL in the AllOrigins CORS proxy
+            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(overpassUrl)}`;
 
-            const servers = [
-                "https://overpass-api.de/api/interpreter",
-                "https://overpass.kumi.systems/api/interpreter",
-                "https://lz4.overpass-api.de/api/interpreter"
-            ];
-
-            let lastError = "Unknown error";
-
-            for (let urlBase of servers) {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000); 
-
-                try {
-                    statusEl.innerText = `Searching map database...`;
-                    
-                    // The Raw POST request we both agreed on
-                    const response = await fetch(urlBase, {
-                        method: "POST",
-                        body: query,
-                        signal: controller.signal
-                    });
-                    
-                    clearTimeout(timeoutId); 
-                    
-                    if (!response.ok) {
-                        lastError = `Server rejected: ${response.status}`;
-                        continue; 
-                    }
-                    
-                    const data = await response.json();
-                    
-                    // Print the actual response data to the console
-                    console.log("RECEIVED DATA:", data);
-
-                    if (data.elements && data.elements.length > 0) {
-                        targetLat = data.elements[0].lat;
-                        targetLon = data.elements[0].lon;
-                        const name = data.elements[0].tags.name || "Unnamed shop";
-                        statusEl.innerText = `Found: ${name}`;
-                        updateUI();
-                        return; 
-                    } else {
-                        statusEl.innerText = "No shops found within 2km.";
-                        targetLat = null;
-                        targetLon = null;
-                        distanceEl.innerText = "N/A";
-                        arrow.style.transform = `rotate(0deg)`;
-                        return; 
-                    }
-                } catch (error) {
-                    clearTimeout(timeoutId); 
-                    if (error.name === 'AbortError') {
-                        lastError = "Server timed out.";
-                    } else {
-                        lastError = error.message; 
-                    }
+            try {
+                // We fetch the proxy URL instead of Overpass directly
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) {
+                    statusEl.innerText = `Network Error: Proxy returned ${response.status}`;
+                    return; 
                 }
+                
+                const data = await response.json();
+
+                if (data.elements && data.elements.length > 0) {
+                    targetLat = data.elements[0].lat;
+                    targetLon = data.elements[0].lon;
+                    const name = data.elements[0].tags.name || "Unnamed shop";
+                    statusEl.innerText = `Found: ${name}`;
+                    updateUI();
+                } else {
+                    statusEl.innerText = "No shops found within 2km.";
+                    targetLat = null;
+                    targetLon = null;
+                    distanceEl.innerText = "N/A";
+                    arrow.style.transform = `rotate(0deg)`;
+                }
+            } catch (error) {
+                statusEl.innerText = `Map Error: ${error.message}`;
             }
-            
-            statusEl.innerText = `Map Error: ${lastError}`;
         }
 
         function updateUI() {
