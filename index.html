@@ -182,35 +182,46 @@
         }
 
 async function fetchFromOverpass(categoryKey, lat, lon) {
-            statusEl.innerText = "3/3: Bypassing security to search map...";
+            statusEl.innerText = "3/3: Searching nearby shops...";
             
-            // Reverting to the actual categories you want
-            const tag = categoryMap[categoryKey]; 
-            const searchRadius = 2000; 
+            // Map your categories to Geoapify's place categories
+            // Full list: https://apidocs.geoapify.com/docs/places/#categories
+            const categoryMapping = {
+                'alcohol': 'commercial.food_and_drink.liquor',
+                'tobacco': 'commercial.tobacco',
+                'cafe': 'amenity.cafe'
+            };
 
-            const query = `[out:json][timeout:10];node${tag}(around:${searchRadius},${lat},${lon});out center;`;
+            const geoapifyCategory = categoryMapping[categoryKey] || 'amenity.cafe';
+            const searchRadiusMeters = 2000; 
             
-            // The raw Overpass URL
-            const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-            
-            // THE CHEAT CODE: Wrap the URL in the AllOrigins CORS proxy
-            const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(overpassUrl)}`;
+            // paste your Geoapify API key here
+            const apiKey = "YOUR_GEOAPIFY_API_KEY"; 
+
+            // Building the clean Geoapify Places URL
+            const url = `https://api.geoapify.com/v2/places?categories=${geoapifyCategory}&filter=circle:${lon},${lat},${searchRadiusMeters}&bias=proximity:${lon},${lat}&limit=1&apiKey=${apiKey}`;
 
             try {
-                // We fetch the proxy URL instead of Overpass directly
-                const response = await fetch(proxyUrl);
+                statusEl.innerText = "Searching commercial database...";
+                const response = await fetch(url);
                 
                 if (!response.ok) {
-                    statusEl.innerText = `Network Error: Proxy returned ${response.status}`;
-                    return; 
+                    statusEl.innerText = `API Error: Status ${response.status}`;
+                    return;
                 }
-                
-                const data = await response.json();
 
-                if (data.elements && data.elements.length > 0) {
-                    targetLat = data.elements[0].lat;
-                    targetLon = data.elements[0].lon;
-                    const name = data.elements[0].tags.name || "Unnamed shop";
+                const data = await response.json();
+                console.log("Geoapify Response:", data);
+
+                if (data.features && data.features.length > 0) {
+                    const place = data.features[0].properties;
+                    
+                    // Geoapify returns coordinates as [longitude, latitude]
+                    const coordinates = data.features[0].geometry.coordinates;
+                    targetLat = coordinates[1];
+                    targetLon = coordinates[0];
+                    
+                    const name = place.name || `Local ${categoryKey} shop`;
                     statusEl.innerText = `Found: ${name}`;
                     updateUI();
                 } else {
@@ -221,7 +232,8 @@ async function fetchFromOverpass(categoryKey, lat, lon) {
                     arrow.style.transform = `rotate(0deg)`;
                 }
             } catch (error) {
-                statusEl.innerText = `Map Error: ${error.message}`;
+                statusEl.innerText = `Search Error: ${error.message}`;
+                console.error(error);
             }
         }
 
