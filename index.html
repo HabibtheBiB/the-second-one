@@ -196,7 +196,7 @@ async function fetchFromOverpass(categoryKey, lat, lon) {
             const searchRadiusMeters = 2000; 
             
             // paste your Geoapify API key here
-            const apiKey = "YOUR_GEOAPIFY_API_KEY"; 
+            const apiKey = "f64032da66924d8293aa7e171580cd91"; 
 
             // Building the clean Geoapify Places URL
             const url = `https://api.geoapify.com/v2/places?categories=${geoapifyCategory}&filter=circle:${lon},${lat},${searchRadiusMeters}&bias=proximity:${lon},${lat}&limit=1&apiKey=${apiKey}`;
